@@ -11,7 +11,7 @@ import (
 func main() {
 
 	// 打开 Excel 文件
-	xlFile, err := excelize.OpenFile("na-page2.xlsx")
+	xlFile, err := excelize.OpenFile("prod-eu-page-错误url.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func main() {
 
 		// 拼接 URLA
 		URLA := acheA + hostnameA + pathA
-		fmt.Println(URLA)
+		fmt.Println(i, URLA)
 
 		// 发送 GET 请求到 URLA，禁止自动重定向
 		client := &http.Client{
@@ -71,7 +71,7 @@ func main() {
 
 		// 获取 Location 值
 		location := resp.Header.Get("Location")
-		fmt.Println("Location:", location, "  ", i)
+		fmt.Println("Location:", location)
 
 	}
 
