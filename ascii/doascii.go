@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"github.com/xuri/excelize/v2"
 	"log"
+	"net"
 	"net/http"
 )
 
 func DoAscii() {
 	// 打开 Excel 文件
-	xlFile, err := excelize.OpenFile("prod-eu-page2-处理后.xlsx")
+	xlFile, err := excelize.OpenFile("test-casesentstive.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,14 +38,26 @@ func DoAscii() {
 		fmt.Println(i, URLA)
 
 		// 发送 GET 请求
-		status, ascii := sendGetRequest(URLA)
+		//status, ascii, serverHost := sendGetRequest(URLA)
+
+		// 发送 GET 请求，no ascii url
+		status, serverHost := sendGetRequest(URLA)
+
+		// 获取服务器IP地址
+		serverIP, err := resolveIP(serverHost)
+		if err != nil {
+			fmt.Println("获取服务器IP地址出错：", err)
+		}
+		fmt.Println("服务器IP地址:", serverIP)
+		fmt.Println("")
 
 		// 在当前工作表中保存状态码和请求 URL
-		xlFile.SetCellValue(sheetName, fmt.Sprintf("D%d", i+1), status)
-		xlFile.SetCellValue(sheetName, fmt.Sprintf("E%d", i+1), ascii)
+		xlFile.SetCellValue(sheetName, fmt.Sprintf("H%d", i+1), serverIP)
+		xlFile.SetCellValue(sheetName, fmt.Sprintf("I%d", i+1), status)
+		//xlFile.SetCellValue(sheetName, fmt.Sprintf("J%d", i+1), ascii)
 
 		fmt.Println("Status Code:", status)
-		fmt.Println("Request URL:", ascii)
+		//fmt.Println("Request URL:", ascii)
 		fmt.Println("")
 		fmt.Println("")
 	}
@@ -70,8 +83,69 @@ func sendGetRequest(URLA string) (int, string) {
 	}
 
 	status := resp.StatusCode
-	ascii := resp.Request.URL.String()
+	serverHost := resp.Request.URL.Host
 
 	resp.Body.Close()
-	return status, ascii
+	return status, serverHost
 }
+
+// 解析域名获取IP地址
+func resolveIP(hostname string) (string, error) {
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return "", err
+	}
+
+	// 选择第一个非环回地址的IP
+	for _, ip := range ips {
+		if ip.To4() != nil && !ip.IsLoopback() {
+			return ip.String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("无法解析IP地址")
+}
+
+/*
+以下代码是在请求后，同时记录最终的 URL
+
+func sendGetRequest(URLA string) (int, string, string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("发生错误:", r)
+		}
+	}()
+
+	resp, err := http.Get(URLA)
+	if err != nil {
+		log.Println("请求出错:", err)
+		return 0, "", ""
+	}
+
+	status := resp.StatusCode
+	ascii := resp.Request.URL.String()
+	serverHost := resp.Request.URL.Host
+
+	resp.Body.Close()
+	return status, ascii, serverHost
+}
+
+// 解析域名获取IP地址
+func resolveIP(hostname string) (string, error) {
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return "", err
+	}
+
+	// 选择第一个非环回地址的IP
+	for _, ip := range ips {
+		if ip.To4() != nil && !ip.IsLoopback() {
+			return ip.String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("无法解析IP地址")
+}
+
+
+*/

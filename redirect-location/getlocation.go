@@ -5,13 +5,14 @@ import (
 	"github.com/xuri/excelize/v2"
 	"io"
 	"log"
+	"net"
 	"net/http"
 )
 
 func GetLocation() {
 
 	// 打开 Excel 文件
-	xlFile, err := excelize.OpenFile("prod-eu-page2-无空白.xlsx")
+	xlFile, err := excelize.OpenFile("test-casesentstive.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -22,13 +23,6 @@ func GetLocation() {
 
 	// 获取第一个sheet表名
 	sheetName := sheetList[0]
-
-	// 创建新的工作表以保存结果
-	newSheetName := "result"
-	_, err = xlFile.NewSheet(newSheetName)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// 读取 sheetName 表
 	rows, err := xlFile.GetRows(sheetName)
@@ -43,7 +37,7 @@ func GetLocation() {
 
 		// 拼接 URLA
 		URLA := acheA + hostnameA + pathA
-		fmt.Println(i, URLA)
+		fmt.Println(i+1, URLA)
 
 		// 发送 GET 请求到 URLA，禁止自动重定向
 		client := &http.Client{
@@ -74,7 +68,21 @@ func GetLocation() {
 		fmt.Println("Location:", location)
 		fmt.Println("")
 
-		xlFile.SetCellValue(sheetName, fmt.Sprintf("D%d", i+1), statusCode)
+		// 获取 server Address 值，是个域名
+		serverHost := resp.Request.URL.Host
+		//fmt.Println("Remote Address:", remoteAddr)
+
+		// 获取服务器IP地址
+		serverIP, err := resolveIP(serverHost)
+		if err != nil {
+			fmt.Println("获取服务器IP地址出错：", err)
+		}
+		fmt.Println("服务器IP地址:", serverIP)
+		fmt.Println("")
+
+		xlFile.SetCellValue(sheetName, fmt.Sprintf("D%d", i+1), serverIP)
+		xlFile.SetCellValue(sheetName, fmt.Sprintf("E%d", i+1), statusCode)
+		xlFile.SetCellValue(sheetName, fmt.Sprintf("F%d", i+1), location)
 
 	}
 	// 保存修改后的 Excel 文件
@@ -83,4 +91,21 @@ func GetLocation() {
 		log.Fatal(err)
 	}
 
+}
+
+// 解析域名获取IP地址
+func resolveIP(hostname string) (string, error) {
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return "", err
+	}
+
+	// 选择第一个非环回地址的IP
+	for _, ip := range ips {
+		if ip.To4() != nil && !ip.IsLoopback() {
+			return ip.String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("无法解析IP地址")
 }

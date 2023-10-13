@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"github.com/xuri/excelize/v2"
 	"log"
+	"net"
 	"net/http"
+	"sync"
 )
 
 func GoDoAscii() {
-
 	// 打开 Excel 文件
-	xlFile, err := excelize.OpenFile("prod-eu-page2-无空白.xlsx")
+	xlFile, err := excelize.OpenFile("gogetlocation.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -28,50 +29,90 @@ func GoDoAscii() {
 		log.Fatal(err)
 	}
 
+	var wg sync.WaitGroup
+	mutex := sync.Mutex{}
+
 	for i, row := range rows {
-		acheA := row[0]
-		hostnameA := row[1]
-		pathA := row[2]
+		wg.Add(1)
+		go func(i int, row []string) {
+			defer wg.Done()
 
-		// 拼接 URLA
-		URLA := acheA + hostnameA + pathA
-		fmt.Println(i, URLA)
+			acheA := row[0]
+			hostnameA := row[1]
+			pathA := row[2]
 
-		// 发送 GET 请求
-		resp, err := http.Get(URLA)
-		if err != nil {
-			log.Fatal(err)
-		}
+			// 拼接 URLA
+			URLA := acheA + hostnameA + pathA
+			//fmt.Println(i, URLA)
 
-		// 获取状态码
-		status := resp.StatusCode
-		fmt.Println("Status Code:", status)
+			// 发送 GET 请求
+			status, serverHost := gosendGetRequest(URLA)
 
-		// 将请求 URL 保存到变量 ascii
-		ascii := resp.Request.URL.String()
-		fmt.Println("Request URL:", ascii)
+			// 获取服务器IP地址
+			serverIP, err := goresolveIP(serverHost)
+			if err != nil {
+				fmt.Println("获取服务器IP地址出错：", err)
+			}
+			fmt.Println("服务器IP地址:", serverIP)
+			fmt.Println("")
 
-		// 关闭响应体
-		resp.Body.Close()
-		fmt.Println("")
-		fmt.Println("")
+			mutex.Lock()
+			// 在当前工作表中保存状态码和请求 URL
+			xlFile.SetCellValue(sheetName, fmt.Sprintf("H%d", i+1), serverIP)
+			xlFile.SetCellValue(sheetName, fmt.Sprintf("I%d", i+1), status)
+			mutex.Unlock()
 
-		// 在当前工作表中保存状态码和请求 URL
-		xlFile.SetCellValue(sheetName, fmt.Sprintf("D%d", i+1), status)
-		xlFile.SetCellValue(sheetName, fmt.Sprintf("E%d", i+1), ascii)
+			// 集中打印
+			fmt.Println(i, URLA)
+			fmt.Println("服务器IP地址:", serverIP)
+			fmt.Println("Status Code:", status)
 
-		// 保存修改后的 Excel 文件
-		err = xlFile.Save()
-		if err != nil {
-			log.Fatal(err)
-		}
-
+			fmt.Println("")
+		}(i, row)
 	}
 
-	//// 保存修改后的 Excel 文件
-	//err = xlFile.Save()
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
+	wg.Wait()
 
+	// 保存修改后的 Excel 文件
+	err = xlFile.Save()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func gosendGetRequest(URLA string) (int, string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("发生错误:", r)
+		}
+	}()
+
+	resp, err := http.Get(URLA)
+	if err != nil {
+		log.Println("请求出错:", err)
+		return 0, ""
+	}
+
+	status := resp.StatusCode
+	serverHost := resp.Request.URL.Host
+
+	resp.Body.Close()
+	return status, serverHost
+}
+
+// 解析域名获取IP地址
+func goresolveIP(hostname string) (string, error) {
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return "", err
+	}
+
+	// 选择第一个非环回地址的IP
+	for _, ip := range ips {
+		if ip.To4() != nil && !ip.IsLoopback() {
+			return ip.String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("无法解析IP地址")
 }
