@@ -37,7 +37,13 @@ func GoGetLocation() {
 
 	// 创建一个 WatiGroup 来等待所有的 goroutine 完成
 	var wg sync.WaitGroup
-	results := make(chan Result, len(rows))
+
+	/* 方式一
+	var results chan Result
+	results = make(chan Result, len(rows))
+	*/
+
+	results := make(chan Result, len(rows)) // results 是一个 channel,  len(rows) 是这个通道的缓冲大小
 	mutex := sync.Mutex{}
 
 	for i, row := range rows {
@@ -95,7 +101,7 @@ func GoGetLocation() {
 			//fmt.Println("服务器IP地址:", serverIP)
 			//fmt.Println("")
 
-			result := Result{
+			result := Result{ // 此为一个结构体 Result，将刚刚单独获取到的变量值进行了初始化，并进行相应赋值
 				Index:      i,
 				ServerIP:   serverIP,
 				StatusCode: statusCode,
@@ -103,7 +109,7 @@ func GoGetLocation() {
 			}
 
 			mutex.Lock()
-			results <- result
+			results <- result // result 的值发送给了 results 这个 channel
 			mutex.Unlock()
 
 			fmt.Println(i+1, URLA)
