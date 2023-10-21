@@ -7,17 +7,18 @@ import (
 )
 
 func main() {
-	//AatoaA.AatoaA()
-
+	redirect_location.GetLocation()
 	//queryescape.Queryescape()
 
-	//redirect_location.GetLocation()
-	////
-	//ascii.DoAscii()
+	//redirect_location.GoLimitGetLocation()
 
-	redirect_location.GoGetLocation() // 并发，获取中间状态 状态码 + location
-	compare.GoCompare()               // 比对单元格值是否一致
+	//redirect_location.GoGetLocation() // 并发，获取中间状态 状态码 + location
+	compare.GoCompare() // 比对单元格值是否一致
+	//compare.GoCompare()
 
-	ascii.GoDoAscii() // 并发，获取最终请求的状态码
+	////ascii.DoAscii()
+	//ascii.GoDoAscii() // 并发，获取最终请求的状态码
+
+	ascii.GoLimitFinalstatus()
 
 }

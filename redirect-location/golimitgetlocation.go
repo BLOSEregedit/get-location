@@ -3,21 +3,38 @@ package redirect_location
 import (
 	"fmt"
 	"github.com/xuri/excelize/v2"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"sync"
+	"time"
 )
 
-func GoGetLocation() {
+// 最大并发数
+const maxConcurrency = 400
+
+// HTTP连接池
+var httpClient *http.Client
+
+func init() {
+	// 创建自定义的HTTP客户端
+	httpClient = &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        maxConcurrency, // 设置最大空闲连接数
+			MaxIdleConnsPerHost: maxConcurrency, // 设置每个主机的最大空闲连接数
+		},
+		Timeout: time.Second * 60, // 设置超时时间 X 秒
+	}
+}
+
+func GoLimitGetLocation() {
 	// 开始执行
 	fmt.Println("")
 	fmt.Println("*************************************")
 	fmt.Println("")
 
 	// 打开 Excel 文件
-	xlFile, err := excelize.OpenFile("allre1016_prod.xlsx")
+	xlFile, err := excelize.OpenFile("allre1016_double.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,6 +56,7 @@ func GoGetLocation() {
 	var wg sync.WaitGroup
 	results := make(chan Result, len(rows))
 	mutex := sync.Mutex{}
+	semaphore := make(chan struct{}, maxConcurrency) // 控制并发数的信号量
 
 	for i, row := range rows {
 		wg.Add(1)
@@ -54,46 +72,44 @@ func GoGetLocation() {
 			//fmt.Println(i+1, URLA)
 
 			// 发送 GET 请求到 URLA，禁止自动重定向
-			client := &http.Client{
-				CheckRedirect: func(req *http.Request, via []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
+			req, err := http.NewRequest("GET", URLA, nil)
+			if err != nil {
+				fmt.Println("创建请求出错：", err)
+				return
 			}
+			req.Header.Set("Connection", "close") // 关闭连接以避免连接保持问题
 
-			// 发送 GET 请求到 URLA
-			resp, err := client.Get(URLA)
+			// 控制并发数，获取信号量
+			semaphore <- struct{}{}
+			defer func() {
+				// 释放信号量
+				<-semaphore
+			}()
+
+			// 发送请求
+			resp, err := httpClient.Do(req)
 			if err != nil {
 				fmt.Println("请求出错：", err)
 				return
 			}
-			//defer resp.Body.Close() // 添加这一行来关闭响应的 Body
-			defer func(Body io.ReadCloser) {
-				err := Body.Close()
+			defer func() {
+				err := resp.Body.Close()
 				if err != nil {
 					log.Println(err)
 				}
-			}(resp.Body)
+			}()
 
 			// 获取响应状态码
 			statusCode := resp.StatusCode
-			//fmt.Println("状态码:", statusCode)
 
 			// 获取 Location 值
 			location := resp.Header.Get("Location")
-			//fmt.Println("Location:", location)
-			//fmt.Println("")
-
-			// 获取 server Address 值，是个域名
-			serverHost := resp.Request.URL.Host
-			//fmt.Println("Remote Address:", remoteAddr)
 
 			// 获取服务器IP地址
-			serverIP, err := goresolveIP(serverHost)
+			serverIP, err := golimitresolveIP(hostnameA)
 			if err != nil {
 				fmt.Println("获取服务器IP地址出错：", err)
 			}
-			//fmt.Println("服务器IP地址:", serverIP)
-			//fmt.Println("")
 
 			result := Result{
 				Index:      i,
@@ -136,7 +152,7 @@ func GoGetLocation() {
 }
 
 // 解析域名获取IP地址
-func goresolveIP(hostname string) (string, error) {
+func golimitresolveIP(hostname string) (string, error) {
 	ips, err := net.LookupIP(hostname)
 	if err != nil {
 		return "", err
@@ -153,7 +169,7 @@ func goresolveIP(hostname string) (string, error) {
 }
 
 // 结果结构体
-type Result struct {
+type ResultLimit struct {
 	Index      int
 	ServerIP   string
 	StatusCode int

@@ -9,9 +9,10 @@ import (
 	"strings"
 )
 
+// 该程序用做转义使用
 func Queryescape() {
 	// 打开 Excel 文件
-	f, err := excelize.OpenFile("prod-eu-page2_1011rd200.xlsx")
+	f, err := excelize.OpenFile("prod-eu-page21014.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}

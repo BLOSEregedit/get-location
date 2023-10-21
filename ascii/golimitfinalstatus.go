@@ -7,20 +7,47 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 )
 
-func GoDoAscii() {
+var (
+	maxConcurrency = 400 // 并发限制数
+	client         *http.Client
+	connPool       *sync.Pool
+)
+
+func init() {
+	// 创建具有连接池的 HTTP 客户端
+	client = &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        maxConcurrency,
+			MaxIdleConnsPerHost: maxConcurrency,
+		},
+		Timeout: time.Second * 30, // 请求超时时间
+	}
+
+	// 创建连接池
+	connPool = &sync.Pool{
+		New: func() interface{} {
+			conn, err := excelize.OpenFile("allre1016_prod.xlsx")
+			if err != nil {
+				log.Fatal(err)
+			}
+			return conn
+		},
+	}
+}
+
+func GoLimitFinalstatus() {
 	fmt.Println("")
 	fmt.Println("*************************************")
-
 	fmt.Println("")
 
-	// 打开 Excel 文件
-	xlFile, err := excelize.OpenFile("allre1016.xlsx")
-	if err != nil {
-		log.Fatal(err)
-	}
-	sheetList := xlFile.GetSheetList()
+	// 从连接池获取 Excel 连接
+	conn := connPool.Get().(*excelize.File)
+	defer connPool.Put(conn) // 将连接放回连接池
+
+	sheetList := conn.GetSheetList()
 	if len(sheetList) == 0 {
 		log.Fatal("Excel 文件中没有工作表")
 	}
@@ -29,18 +56,24 @@ func GoDoAscii() {
 	sheetName := sheetList[0]
 
 	// 读取 sheetName 表
-	rows, err := xlFile.GetRows(sheetName)
+	rows, err := conn.GetRows(sheetName)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
 	mutex := sync.Mutex{}
+	semaphore := make(chan struct{}, maxConcurrency) // 控制并发数的信号量
 
 	for i, row := range rows {
 		wg.Add(1)
+		semaphore <- struct{}{} // 获取信号量
+
 		go func(i int, row []string) {
-			defer wg.Done()
+			defer func() {
+				<-semaphore // 释放信号量
+				wg.Done()
+			}()
 
 			acheA := row[0]
 			hostnameA := row[1]
@@ -48,13 +81,12 @@ func GoDoAscii() {
 
 			// 拼接 URLA
 			URLA := acheA + hostnameA + pathA
-			//fmt.Println(i, URLA)
 
 			// 发送 GET 请求
-			status, serverHost := gosendGetRequest(URLA)
+			status, serverHost := golimitGetRequest(URLA)
 
 			// 获取服务器IP地址
-			serverIP, err := goresolveIP(serverHost)
+			serverIP, err := golimitresolveIP(serverHost)
 			if err != nil {
 				fmt.Println("获取服务器IP地址出错：", err)
 			}
@@ -63,8 +95,8 @@ func GoDoAscii() {
 
 			mutex.Lock()
 			// 在当前工作表中保存状态码和请求 URL
-			xlFile.SetCellValue(sheetName, fmt.Sprintf("H%d", i+1), serverIP)
-			xlFile.SetCellValue(sheetName, fmt.Sprintf("I%d", i+1), status)
+			conn.SetCellValue(sheetName, fmt.Sprintf("H%d", i+1), serverIP)
+			conn.SetCellValue(sheetName, fmt.Sprintf("I%d", i+1), status)
 			mutex.Unlock()
 
 			// 集中打印
@@ -78,21 +110,28 @@ func GoDoAscii() {
 
 	wg.Wait()
 
-	// 保存修改后的 Excel 文件
-	err = xlFile.Save()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// 异步保存修改后的 Excel 文件
+	go func() {
+		err := conn.Save()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// 等待保存操作完成
+	time.Sleep(time.Second)
+
+	fmt.Println("Excel 文件保存成功！")
 }
 
-func gosendGetRequest(URLA string) (int, string) {
+func golimitGetRequest(URLA string) (int, string) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println("发生错误:", r)
 		}
 	}()
 
-	resp, err := http.Get(URLA)
+	resp, err := client.Get(URLA)
 	if err != nil {
 		log.Println("请求出错:", err)
 		return 0, ""
@@ -106,7 +145,7 @@ func gosendGetRequest(URLA string) (int, string) {
 }
 
 // 解析域名获取IP地址
-func goresolveIP(hostname string) (string, error) {
+func golimitresolveIP(hostname string) (string, error) {
 	ips, err := net.LookupIP(hostname)
 	if err != nil {
 		return "", err

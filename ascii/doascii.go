@@ -10,7 +10,7 @@ import (
 
 func DoAscii() {
 	// 打开 Excel 文件
-	xlFile, err := excelize.OpenFile("test-casesentstive.xlsx")
+	xlFile, err := excelize.OpenFile("allre1014.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}

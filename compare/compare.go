@@ -8,7 +8,7 @@ import (
 
 func GoCompare() {
 	// 打开 Excel 文件
-	xlFile, err := excelize.OpenFile("compare1.xlsx")
+	xlFile, err := excelize.OpenFile("allre1016_prod.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}
