@@ -44,7 +44,7 @@ func GoGetLocation() {
 	*/
 
 	results := make(chan Result, len(rows)) // results 是一个 channel,  len(rows) 是这个通道的缓冲大小
-	mutex := sync.Mutex{}
+	mutex := sync.Mutex{}                   // Mutex 是互斥锁
 
 	for i, row := range rows {
 		wg.Add(1)
@@ -108,9 +108,9 @@ func GoGetLocation() {
 				Location:   location,
 			}
 
-			mutex.Lock()
+			mutex.Lock()      // 加锁
 			results <- result // result 的值发送给了 results 这个 channel
-			mutex.Unlock()
+			mutex.Unlock()    // 释放锁
 
 			fmt.Println(i+1, URLA)
 			fmt.Println("状态码:", statusCode)
